@@ -69,7 +69,10 @@ function imgSegmented = segmentationStatMoments(inImg, nClusters, winDims, winSt
 % *List of Changes:*
 % 2015-03-13- first release version.
 
-%% Default params
+%% Default input parameters
+if nargin < 1
+    inImg = [];
+end
 if nargin < 2
     nClusters = 4;
 end
@@ -83,6 +86,11 @@ if nargin < 5
     isGrayScale = true;
 end
 
+if isempty(inImg)
+    imageFormats=imformats;
+    imageExtList=cat(2, imageFormats.ext);    % image files extentions
+    inImg = filesFullName(inImg, imageExtList, 'Choose image file subject to segmentatiuon', true);
+end
 if ischar(inImg) && exist(inImg, 'file') == 2
     inImg = imread(inImg);
 end
@@ -93,25 +101,47 @@ if isGrayScale && nClrs==3
     nClrs = 1;
 end
 
-nMoments=1:5;
+%% Prepare feature space parameters
+nMoments = 1:5;
 nMomentVals = length(nMoments);
-
+switch( class(inImg) )
+    case('uint8')
+        outClass = 'uint16';
+    case('uint16')
+        outClass = 'uint32';
+    case('uint32')
+        outClass = 'uint64';
+    case('int8')
+        outClass = 'int16';
+    case('int16')
+        outClass = 'int32';
+    case('int32')
+        outClass = 'int64';    
+    case({'int64', 'uint64'})
+        outClass = 'single';
+    otherwise
+        outClass = 'double';
+end
+%% Feature space generation
 % Prepare sliding window params
 winDims=winDims+mod(winDims+1, 2); % make diention odd
 winNeigh=floor(winDims/2);
 imgFeatSpace=blockproc(inImg, winStep, @raw2FeatSpace, 'BorderSize', winNeigh,...
     'TrimBorder', false, 'PadPartialBlocks', true, 'PadMethod', 'symmetric' );
 
+%% Perform K-means clusteirng based image segmentation using multi-dimentional feature space matrix
 imgDims=size(imgFeatSpace);
 nRows=imgDims(1)*imgDims(2);
 reorderedData = reshape(imgFeatSpace, nRows, []);
 idxCluster = k_means( reorderedData, nClusters); % k_means, kmeans if you have statistical toolbox
 imgSegmented=reshape(idxCluster, imgDims(1), imgDims(2) );
 
+% Bring segmentation image to canonical form (to allow easier comparison of results)
+imgSegmented = switchMatrixlabels(imgSegmented);
 
 %% Nested Servise function trasfering row data to feature space vector of each sliding window
     function tightImgMoments = raw2FeatSpace(inSubImgLBP)
-        tightImgMoments = zeros(1, 1, nClrs*nMomentVals );
+        tightImgMoments = zeros(1, 1, nClrs*nMomentVals, outClass );
         for iClr=1:nClrs
             clrSubImgVec=single(reshape( inSubImgLBP.data(:, :, iClr), [], 1 ));
             iClrShift = (iClr-1)*nMoments;

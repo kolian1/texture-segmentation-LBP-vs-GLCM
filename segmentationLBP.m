@@ -68,7 +68,10 @@ function imgSegmented = segmentationLBP(inImg, nClusters, winDims, winStep, isGr
 % *List of Changes:*
 % 2015-03-13- first release version.
 
-%% Default params
+%% Default input parameters
+if nargin < 1
+    inImg = [];
+end
 if nargin < 2
     nClusters = 3;
 end
@@ -82,6 +85,11 @@ if nargin < 5
     isGrayScale = true;
 end
 
+if isempty(inImg)
+    imageFormats=imformats;
+    imageExtList=cat(2, imageFormats.ext);    % image files extentions
+    inImg = filesFullName(inImg, imageExtList, 'Choose image file subject to segmentatiuon', true);
+end
 if ischar(inImg) && exist(inImg, 'file') == 2
     inImg = imread(inImg);
 end
@@ -92,6 +100,7 @@ if isGrayScale && nClrs==3
     nClrs = 1;
 end
 
+%% Prepare feature space parameters
 % Generale LBP image
 filtR= generateRadialFilterLBP(8, 1, 'shiftBasedLBP');
 imgLBP = shiftBasedLBP(inImg, 'filtR', filtR);
@@ -110,22 +119,45 @@ for iClr=1:nClrs
 end
 nHistElems = numel(imgValsLBP)/nClrs;
 
+%% Feature space generation
 % Prepare sliding window params
 winDims=winDims+mod(winDims+1, 2); % make diention odd
 winNeigh=floor(winDims/2);
+switch( class(inImg) )
+    case('uint8')
+        outClass = 'uint16';
+    case('uint16')
+        outClass = 'uint32';
+    case('uint32')
+        outClass = 'uint64';
+    case('int8')
+        outClass = 'int16';
+    case('int16')
+        outClass = 'int32';
+    case('int32')
+        outClass = 'int64';    
+    case({'int64', 'uint64'})
+        outClass = 'single';
+    otherwise
+        outClass = 'double';
+end
 
 imgFeatSpace=blockproc(imgLBP, winStep, @raw2FeatSpace, 'BorderSize', winNeigh,...
     'TrimBorder', false, 'PadPartialBlocks', true, 'PadMethod', 'symmetric' );
 
+%% Perform K-means clusteirng based image segmentation using multi-dimentional feature space matrix
 imgClusterDims = size(imgFeatSpace);
 nRows=imgClusterDims(1)*imgClusterDims(2);
 reorderedData = reshape(imgFeatSpace, nRows, []);
 idxCluster = k_means( reorderedData, nClusters); % "k_means", use "kmeans" if you have statistical toolbox
 imgSegmented = reshape(idxCluster, imgClusterDims(1), imgClusterDims(2) );
 
+% Bring segmentation image to canonical form (to allow easier comparison of results)
+imgSegmented = switchMatrixlabels(imgSegmented);
+
 %% Nested Servise function trasfering row data to feature space vector of each sliding window
     function tightHistImgLBP=raw2FeatSpace(inSubImgLBP)
-        tightHistImgLBP = zeros(1, 1, nHistElems*nClrs);
+        tightHistImgLBP = zeros(1, 1, nHistElems*nClrs, outClass);
         for iSubImgClr=1:nClrs
             imImgVec=single(reshape( inSubImgLBP.data(:, :, iSubImgClr), [], 1 ));
             tightHistImgLBP( :, :, (iSubImgClr-1)*nHistElems+(1:nHistElems) )=...

@@ -69,6 +69,20 @@ error(nargchk(2,2,nargin));
 error(nargoutchk(0,2,nargout));
 
 [n,m]=size(X);
+switch( class(X) )
+%     case({'uint8', 'int16'})
+%         outClass = 'int32';
+%     case({'uint16', 'int32'})
+%         outClass = 'int64';
+%     case('int8')
+%         outClass = 'int16';
+%     case({'uint32', 'int64', 'uint64'})
+%         outClass = 'single';
+    otherwise
+        outClass = 'double';
+end
+% allocating variables
+X = cast(X, outClass);
 
 % Check if second input is centroids
 if ~isscalar(k)
@@ -78,18 +92,16 @@ else
     c=X(ceil(rand(k,1)*n),:);
 end
 
-% allocating variables
-g0=ones(n,1);
-gIdx=zeros(n,1);
-D=zeros(n,k);
-
+g0=ones(n,1, 'like', X);
+gIdx=zeros(n,1, 'like', X);
+D=zeros(n,k, 'like', X);
 % Main loop converge if previous partition is the same as current
 while any(g0~=gIdx)
 %     disp(sum(g0~=gIdx))
     g0=gIdx;
     % Loop for each centroid
     for t=1:k
-        d=zeros(n,1);
+        d=zeros(n,1, 'like', X);
         % Loop for each dimension
         for s=1:m
             d=d+(X(:,s)-c(t,s)).^2;

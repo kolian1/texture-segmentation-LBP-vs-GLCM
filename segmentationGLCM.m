@@ -69,7 +69,10 @@ function imgSegmented = segmentationGLCM(inImg, nClusters, winDims, winStep, isG
 % *List of Changes:*
 % 2015-03-13- first release version.
 
-%% Default params
+%% Default input parameters
+if nargin < 1
+    inImg = [];
+end
 if nargin < 2
     nClusters=3;
 end
@@ -83,6 +86,11 @@ if nargin < 5
     isGrayScale = true;
 end
 
+if isempty(inImg)
+    imageFormats=imformats;
+    imageExtList=cat(2, imageFormats.ext);    % image files extentions
+    inImg = filesFullName(inImg, imageExtList, 'Choose image file subject to segmentatiuon', true);
+end
 if ischar(inImg) && exist(inImg, 'file') == 2
     inImg = imread(inImg);
 end
@@ -93,22 +101,28 @@ if isGrayScale && nClrs==3
     nClrs = 1;
 end
 
+%% Feature space parameters
 ParamsGLCM=struct ('angGLSM', [0, 45, 90, 135], 'distGLSM', [0, 1, 3],...
     'NumLevels', 8, 'Symmetric', true, 'GrayLimits', [],...
     'isRawOut', false);
-   
-winDims=winDims+mod(winDims+1, 2); % make diention odd
 
+%% Feature space generation
+winDims=winDims+mod(winDims+1, 2); % make diention odd
 winNeigh=floor(winDims/2);
+
 imgFeatSpace=blockproc(inImg, winStep, @raw2FeatSpace, 'BorderSize', winNeigh,...
     'TrimBorder', false, 'PadPartialBlocks', true, 'PadMethod', 'symmetric' );
 
+%% Perform K-means clusteirng based image segmentation using multi-dimentional feature space matrix
 imgDims=size(imgFeatSpace);
 nRows=imgDims(1)*imgDims(2);
 reorderedData = reshape(imgFeatSpace, nRows, []);
 
 idxCluster = k_means( reorderedData, nClusters); % "k_means", use "kmeans" if you have statistical toolbox
 imgSegmented=reshape(idxCluster, imgDims(1), imgDims(2) );
+
+% Bring segmentation image to canonical form (to allow easier comparison of results)
+imgSegmented = switchMatrixlabels(imgSegmented);
 
 %% Nested Servise function trasfering row data to feature space vector of each sliding window
     function outData=raw2FeatSpace(inImg)
